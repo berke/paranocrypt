@@ -26,7 +26,7 @@ use urandom::Urandom;
 fn load_key<P:AsRef<Path>>(path:P)->Result<Q> {
     let mut fd = File::open(path)?;
     let mut u = String::new();
-    let m = fd.read_to_string(&mut u)?;
+    let _ = fd.read_to_string(&mut u)?;
     let v = u.trim();
     let mut key = [0;4];
     let mut vs = v.split('-');
@@ -40,9 +40,8 @@ fn load_key<P:AsRef<Path>>(path:P)->Result<Q> {
 }
 
 fn write_u64s<W:Write>(w:&mut W,xs:&[u64])->Result<()> {
-    let mut y = [0;8];
     for &x in xs {
-        y = x.to_le_bytes();
+        let y = x.to_le_bytes();
         w.write_all(&y[..])?;
     }
     Ok(())
@@ -66,8 +65,8 @@ fn main()->Result<()> {
 
     let key_file : OsString = args.value_from_str("--key")?;
     let decrypt = args.contains("--decrypt");
-    let mut stdin = std::io::stdin();
-    let mut stdout = std::io::stdout();
+    let stdin = std::io::stdin();
+    let stdout = std::io::stdout();
     let mut input = stdin.lock();
     let mut output = stdout.lock();
 
@@ -82,14 +81,17 @@ fn main()->Result<()> {
 
     if decrypt {
         read_u64s(&mut input,&mut r1[..])?;
+        read_u64s(&mut input,&mut r2[..])?;
         read_u64s(&mut input,&mut p0[..])?;
         read_u64s(&mut input,&mut p1[..])?;
     } else {
         r1 = urnd.random_quad()?;
+        r2 = urnd.random_quad()?;
         p0 = urnd.random_quad()?;
         p1 = urnd.random_quad()?;
 
         write_u64s(&mut output,&r1[..])?;
+        write_u64s(&mut output,&r2[..])?;
         write_u64s(&mut output,&p0[..])?;
         write_u64s(&mut output,&p1[..])?;
     }
@@ -101,6 +103,7 @@ fn main()->Result<()> {
     let k1 = c0.get();
 
     let mut c1 = Cipher::new(k1);
+    c1.init(r2);
 
     let mut buf = vec![0;16384];
 
@@ -109,46 +112,41 @@ fn main()->Result<()> {
     let mut t = T;
     let mut k2 = [0;4];
 
-    let mut bs = [0];
-
     loop {
-        if i == B {
-            t += 1;
-            if t == T {
-                if decrypt {
-                    read_u64s(&mut input,&mut r2[..])?;
-                } else {
-                    r2 = urnd.random_quad()?;
-                    write_u64s(&mut output,&r2[..])?;
-                }
-                
-                c1.init(r2);
-                k2 = c1.get();
-                t = 0;
-            }
-                
-            let y = encrypt(k2,pos);
-            pos[0][0] += 1;
-            let mut m = 0;
-            for j in 0..2 {
-                for k in 0..4 {
-                    let z = y[j][k].to_le_bytes();
-                    for l in 0..8 {
-                        stream[m] = z[l];
-                        m += 1;
-                    }
-                }
-            }
-            i = 0;
-        }
-
-        let m = input.read(&mut bs[..])?;
+        let m = input.read(&mut buf[..])?;
         if m == 0 {
             break;
         }
-        bs[0] ^= stream[i];
-        i += 1;
-        output.write_all(&bs[..])?;
+
+        for b in &mut buf[0..m] {
+            if i == B {
+                t += 1;
+                if t == T {
+                    c1.step();
+                    k2 = c1.get();
+                    t = 0;
+                }
+                
+                let y = encrypt(k2,pos);
+                pos[0][0] += 1;
+                let mut n = 0;
+                for j in 0..2 {
+                    for k in 0..4 {
+                        let z = y[j][k].to_le_bytes();
+                        for l in 0..8 {
+                            stream[n] = z[l];
+                            n += 1;
+                        }
+                    }
+                }
+                i = 0;
+            }
+
+            *b ^= stream[i];
+            i += 1;
+        }
+
+        output.write_all(&buf[0..m])?;
     }
 
     Ok(())
