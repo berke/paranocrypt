@@ -12,10 +12,13 @@ use std::{
     ffi::OsString,
     io::{
         BufWriter,
+        IsTerminal,
         Read,
-        Stdin,
-        Stdout,
 	Write
+    },
+    os::fd::{
+        AsRawFd,
+        FromRawFd
     },
     path::Path,
 };
@@ -68,7 +71,13 @@ fn main()->Result<()> {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     let mut input = stdin.lock();
-    let mut output = stdout.lock();
+    let stdout = stdout.lock();
+    if stdout.is_terminal() {
+        bail!("Will not write to a TTY");
+    }
+    let stdout = stdout.as_raw_fd();
+    let stdout = unsafe { File::from_raw_fd(stdout) };
+    let mut output = BufWriter::new(stdout);
 
     let k0 = load_key(&key_file)?;
 
