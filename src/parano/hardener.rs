@@ -1,15 +1,5 @@
 use super::*;
 
-/// Size of memory table, in blocks
-const LG2_N : u32 = 12;
-const N : usize = 1 << LG2_N;
-
-/// Number of hardening rounds per step
-const H : usize = 1 << 12;
-
-/// Number of warmup steps
-const W : usize = 64;
-
 /// A hardener is a key derivation method
 pub struct Hardener {
     tr:Transform,
@@ -36,19 +26,16 @@ impl Hardener {
 
     /// (Re-)initialize the hardener with a given random value
     pub fn init(&mut self,r:Q) {
-        let mut xy = [[0;4];2];
+        let mut xy : Block = [[0;4];2];
 
         for i in 0..N {
             for xyj in xy.iter_mut() {
                 for (xyjk,rk) in xyj.iter_mut().zip(r.iter()) {
-                    *xyjk = rk ^ i as W;
+                    *xyjk = (*xyjk).wrapping_add(rk ^ i as W);
                 }
             }
-            self.qs[i] = self.tr.transform(xy);
-        }
-
-        for _ in 0..W {
-            self.step();
+            xy = self.tr.transform(xy);
+            self.qs[i] = xy;
         }
     }
 
@@ -57,12 +44,17 @@ impl Hardener {
         self.qs[0][1]
     }
     
-    /// Advance the hardener step
+    /// Step the hardener
     pub fn step(&mut self) {
         let Self { qs,.. } = self;
-        let mut p = qs[0][0][0] & (N - 1) as W;
+
+        let mut qs_tot = qs[0];
+        
+        let mut p = qs_tot[0][0] & (N - 1) as W;
 
         for _ in 0..H {
+            let qsp = qs[p as usize];
+            qs_tot = xor_block(qs_tot,qsp);
             let mut w = qs[p as usize][0][0];
             let p_next = qs[p as usize][0][1] & (N - 1) as W;
 
@@ -82,5 +74,6 @@ impl Hardener {
         }
 
         qs.swap(0,p as usize);
+        qs[0] = xor_block(qs[0],qs_tot);
     }
 }

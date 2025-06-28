@@ -36,11 +36,15 @@ fn f1(z:W,[a,b,c,d]:Q)->Q {
     }
 }
 
-fn xor(mut q:Q,r:Q)->Q {
+pub(crate) fn xor(mut q:Q,r:Q)->Q {
     for i in 0..4 {
         q[i] ^= r[i];
     }
     q
+}
+
+pub(crate) fn xor_block(q:Block,r:Block)->Block {
+    [xor(q[0],r[0]),xor(q[1],r[1])]
 }
 
 fn f2(mut z:W,mut q0:Q)->Q {

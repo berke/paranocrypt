@@ -24,10 +24,17 @@ pub type Block = [Q;2];
 pub type Key = Q;
 
 // Number of rounds
-const R : usize = 128;
+const R : usize = 16;
 
 // Bytes per block
 const B : usize = std::mem::size_of::<Block>();
+
+// Size of hardener memory table, in blocks
+const LG2_N : u32 = 16;
+const N : usize = 1 << LG2_N;
+
+// Number of hardening rounds per step
+const H : usize = 1 << 6;
 
 // Number of blocks we can generate from a given key before it is
 // "spent"
