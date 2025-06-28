@@ -35,6 +35,7 @@ fn main()->Result<()> {
     }
     let stdout = stdout.as_raw_fd();
     let stdout = unsafe { File::from_raw_fd(stdout) };
+    let mut stderr = std::io::stderr().lock();
     let mut output = BufWriter::new(stdout);
 
     let k0 = parano::load_hex_key(&key_file)?;
@@ -50,9 +51,11 @@ fn main()->Result<()> {
             state
         };
 
-    let mut cipher = parano::Cipher::new(k0,state,decrypt);
+    let cipher = parano::Cipher::new(k0,state,decrypt);
     let outcome = cipher.process_stream(&mut input,&mut output,&mut buf[..])?;
-    eprintln!(">>> {:?}",outcome);
+    eprint!("{} ",outcome.len);
+    parano::show_quad(&mut stderr,outcome.hmac)?;
+    eprintln!();
 
     Ok(())
 }

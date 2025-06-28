@@ -49,6 +49,7 @@ pub use cipher::{
     Cipher,
 };
 
+#[allow(unused)]
 pub use utils::{
     load_hex_key,
     show_quad

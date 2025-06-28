@@ -213,7 +213,6 @@ impl Cipher
         R:Read,
         W:Write
     {
-        let mut total = 0;
         loop {
             let m = input.read(buf)?;
             if m == 0 {
@@ -221,7 +220,6 @@ impl Cipher
             }
             self.transform(&mut buf[0..m],self.decrypt);
             output.write_all(&buf[0..m])?;
-            total += m;
         }
         Ok(self.hmac())
     }
