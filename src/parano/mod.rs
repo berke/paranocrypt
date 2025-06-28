@@ -15,10 +15,10 @@ use std::{
 // Word size
 pub type W = u64;
 
-// Quad-word
+// Quad-word (8x4 = 32 bytes)
 pub type Q = [W;4];
 
-// Block
+// Block (64 bytes)
 pub type Block = [Q;2];
 
 pub type Key = Q;
@@ -49,4 +49,7 @@ pub use cipher::{
     Cipher,
 };
 
-pub use utils::load_hex_key;
+pub use utils::{
+    load_hex_key,
+    show_quad
+};

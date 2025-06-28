@@ -50,8 +50,9 @@ fn main()->Result<()> {
             state
         };
 
-    let mut cipher = parano::Cipher::new(k0,state);
-    cipher.process_stream(&mut input,&mut output,&mut buf[..])?;
+    let mut cipher = parano::Cipher::new(k0,state,decrypt);
+    let outcome = cipher.process_stream(&mut input,&mut output,&mut buf[..])?;
+    eprintln!(">>> {:?}",outcome);
 
     Ok(())
 }

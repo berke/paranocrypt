@@ -45,11 +45,29 @@ pub struct Cipher {
 
     /// The transform for the traffic
     tr:Transform,
+
+    /// Total bytes
+    len:u64,
+
+    /// The HMAC value
+    hmac:Block,
+
+    /// Direction
+    decrypt:bool
+}
+
+#[derive(Clone,Debug)]
+pub struct CipherOutcome {
+    /// Total number of plaintext bytes
+    pub len:u64,
+
+    /// Computed HMAC
+    pub hmac:Q
 }
 
 impl Cipher
 {
-    pub fn new(k0:Key,state:CipherState)->Self
+    pub fn new(k0:Key,state:CipherState,decrypt:bool)->Self
     {
         let CipherState { r0,r1,p0,p1 } = state;
         
@@ -89,21 +107,40 @@ impl Cipher
 
             // The current key has been freshly generated
             t:0,
+
+            len:0,
+
+            hmac:[[0;4];2],
+
+            decrypt
         }
+    }
+
+    fn flush_hmac(&mut self) {
+        // We've finished a block, update HMAC
+        let mut hm = bytes_to_block(&self.stream[..]);
+        // let mut hm = [[0;4];2];
+        hm = xor_block(hm,self.hmac);
+        self.hmac = self.tr.transform(hm);
     }
 
     /// Apply (that is, xor) the keystream to the buffer
     /// As this is a stream cipher, this operation is used for encryption
     /// as well as decryption
-    fn transform(&mut self,buf:&mut [u8]) {
-        let Self { i,t,h,pos,tr,stream,.. } = self;
-
+    fn transform(&mut self,buf:&mut [u8],decrypt:bool) {
+        let m = buf.len();
         for b in buf {
-            if *i == B {
+            if self.i == B {
+                // We've finished a block, update HMAC
+                self.flush_hmac();
+                
+                let Self { i,t,h,pos,tr,stream,.. } = self;
+                
+                // Increment key use counter
                 *t += 1;
-                if *t == T {
-                    // This traffic key is spent
 
+                // Is this traffic key spent?
+                if *t == T {
                     // Compute a new traffic key using the hardener
                     h.step();
                     let k = h.get();
@@ -122,32 +159,56 @@ impl Cipher
                 pos[0][0] += 1;
 
                 // Fill the stream buffer
-                let mut n = 0;
-                for yj in y.iter() {
-                    for yjk in yj.iter() {
-                        let z = yjk.to_le_bytes();
-                        for zl in z {
-                            stream[n] = zl;
-                            n += 1;
-                        }
-                    }
-                }
+                block_to_bytes(y,stream);
 
                 // Reset the stream position
                 *i = 0;
             }
 
-            // Encrypt the next byte
-            *b ^= stream[*i];
+            let Self { i,stream,.. } = self;
+
+            // Transform the next byte
+            let nb = *b ^ stream[*i];
+
+            // Store ciphertext byte for HMAC
+            if decrypt {
+                stream[*i] = *b;
+            } else {
+                stream[*i] = nb;
+            }
+
+            // Write modified byte
+            *b = nb;
+            
+            // Increment
             *i += 1;
+        }
+        self.len += m as u64;
+    }
+
+    pub fn hmac(&mut self)->CipherOutcome {
+        let len = self.len;
+        if self.i < B || true {
+            let mut zeroes = [0;B];
+            self.transform(&mut zeroes[self.i ..],false);
+        }
+        for _ in 0..8 {
+            let mut len = len.to_le_bytes();
+            self.transform(&mut len[..],false);
+        }
+        self.flush_hmac();
+        let hmac = self.hmac[0];
+        CipherOutcome {
+            len,
+            hmac
         }
     }
 
-    pub fn process_stream<R,W>(&mut self,
+    pub fn process_stream<R,W>(mut self,
                                input:&mut R,
                                output:&mut W,
                                buf:&mut [u8])->
-        Result<usize,std::io::Error>
+        Result<CipherOutcome,std::io::Error>
     where
         R:Read,
         W:Write
@@ -158,10 +219,10 @@ impl Cipher
             if m == 0 {
                 break;
             }
-            self.transform(&mut buf[0..m]);
+            self.transform(&mut buf[0..m],self.decrypt);
             output.write_all(&buf[0..m])?;
             total += m;
         }
-        Ok(total)
+        Ok(self.hmac())
     }
 }
