@@ -188,7 +188,7 @@ impl Cipher
 
     pub fn hmac(&mut self)->CipherOutcome {
         let len = self.len;
-        if self.i < B || true {
+        if self.i < B {
             let mut zeroes = [0;B];
             self.transform(&mut zeroes[self.i ..],false);
         }
